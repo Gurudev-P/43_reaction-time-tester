@@ -9,12 +9,19 @@ RED = (190, 60, 60)
 DARK = (35, 35, 35)
 
 class GameEngine:
-    def __init__(self, width, height, rounds_total=5, min_wait_ms=1000, max_wait_ms=3000):
+    DIFFICULTIES = {
+        "Easy": (5, 1500, 3500),
+        "Medium": (7, 1000, 3000),
+        "Hard": (10, 700, 2000),
+    }
+
+    def __init__(self, width, height, rounds_total=7, min_wait_ms=1000, max_wait_ms=3000):
         self.width = width
         self.height = height
         self.rounds_total = rounds_total
         self.min_wait_ms = min_wait_ms
         self.max_wait_ms = max_wait_ms
+        self.difficulty = "Medium"
 
         self.round = Round(self.min_wait_ms, self.max_wait_ms)
         self.reaction_times = []
@@ -25,6 +32,7 @@ class GameEngine:
         self.result_pause_ms = 800
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 46)
+        self.small_font = pygame.font.SysFont("Arial", 22)
         self.game_over = False
         self.mode = "playing"
 
@@ -32,8 +40,18 @@ class GameEngine:
         if self.game_over:
             return
 
-        is_click = event.type == pygame.MOUSEBUTTONDOWN
+        is_click = event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1
         is_space = event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE
+
+        if self.mode == "results":
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    self._start_session("Easy")
+                elif event.key == pygame.K_2:
+                    self._start_session("Medium")
+                elif event.key == pygame.K_3:
+                    self._start_session("Hard")
+            return
 
         if (is_click or is_space) and self.round.state in ("waiting", "go"):
             reaction_ms = self.round.register_input()
@@ -56,6 +74,17 @@ class GameEngine:
             now = pygame.time.get_ticks()
             if self.result_shown_at is not None and now - self.result_shown_at >= self.result_pause_ms:
                 self._start_next_round()
+
+    def _start_session(self, difficulty):
+        self.difficulty = difficulty
+        self.rounds_total, self.min_wait_ms, self.max_wait_ms = self.DIFFICULTIES[difficulty]
+        self.reaction_times = []
+        self.false_starts = 0
+        self.rounds_completed = 0
+        self.game_over = False
+        self.mode = "playing"
+        self.result_shown_at = None
+        self.round = Round(self.min_wait_ms, self.max_wait_ms)
 
     def _start_next_round(self):
         if self.rounds_completed >= self.rounds_total:
@@ -90,7 +119,7 @@ class GameEngine:
         screen.blit(text_surf, text_rect)
 
         round_text = self.font.render(
-            f"Round {min(self.rounds_completed + 1, self.rounds_total)}/{self.rounds_total}",
+            f"{self.difficulty} - Round {min(self.rounds_completed + 1, self.rounds_total)}/{self.rounds_total}",
             True, WHITE
         )
         screen.blit(round_text, (10, 10))
@@ -112,29 +141,40 @@ class GameEngine:
         screen.blit(title, title.get_rect(center=(self.width // 2, 45)))
 
         lines = [
+            f"Difficulty: {self.difficulty}",
             f"Average valid reaction: {self.average_reaction_ms()} ms",
             f"False starts: {self.false_starts}",
             "",
             "Reaction times:",
         ]
 
-        y = 110
+        y = 100
         for line in lines:
             surf = self.font.render(line, True, WHITE)
             screen.blit(surf, (40, y))
-            y += 38
+            y += 36
 
         if self.reaction_times:
             for index, value in enumerate(self.reaction_times, start=1):
                 surf = self.font.render(f"Round {index}: {value} ms", True, WHITE)
                 x = 55 + ((index - 1) % 2) * 270
                 row = (index - 1) // 2
-                screen.blit(surf, (x, y + row * 35))
-            y += ((len(self.reaction_times) + 1) // 2) * 35 + 20
+                screen.blit(surf, (x, y + row * 34))
+            y += ((len(self.reaction_times) + 1) // 2) * 34 + 20
         else:
             surf = self.small_font.render("No valid reaction times recorded.", True, WHITE)
             screen.blit(surf, (40, y))
             y += 30
 
-        prompt = self.font.render("Close the window to exit.", True, WHITE)
-        screen.blit(prompt, prompt.get_rect(center=(self.width // 2, self.height - 45)))
+        menu = [
+            "1 = Easy (5 rounds, 1.5-3.5s wait)",
+            "2 = Medium (7 rounds, 1.0-3.0s wait)",
+            "3 = Hard (10 rounds, 0.7-2.0s wait)",
+            "Close the window to exit.",
+        ]
+
+        y = max(y + 10, 300)
+        for line in menu:
+            surf = self.small_font.render(line, True, WHITE)
+            screen.blit(surf, (40, y))
+            y += 28
