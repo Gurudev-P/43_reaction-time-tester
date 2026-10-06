@@ -37,7 +37,7 @@ class GameEngine:
         self.result_pause_ms = 800
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 46)
-        self.small_font = pygame.font.SysFont("Arial", 22)
+        self.small_font = pygame.font.SysFont("Arial", 20)
         self.game_over = False
         self.mode = "playing"
         self._init_sounds()
@@ -91,9 +91,11 @@ class GameEngine:
                     self._start_session("Medium")
                 elif event.key == pygame.K_3:
                     self._start_session("Hard")
+                elif event.key in (pygame.K_ESCAPE, pygame.K_q):
+                    return "quit"
             return None
 
-        if self.mode != "playing":
+        if self.game_over or self.mode != "playing":
             return None
 
         is_click = event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1
