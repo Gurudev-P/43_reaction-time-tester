@@ -1,30 +1,26 @@
 import pygame
 from game.game_engine import GameEngine
 
-# Initialize pygame/Start application
 pygame.init()
 
-# Screen dimensions
-WIDTH, HEIGHT = 600, 400
+WIDTH, HEIGHT = 700, 500
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Reaction Time Tester - Pygame Version")
+pygame.display.set_caption("Reaction Time Tester - Lab 4")
 
-# Clock
 clock = pygame.time.Clock()
 FPS = 60
 
-# Game loop
-engine = GameEngine(WIDTH, HEIGHT)
 
 def main():
+    engine = GameEngine(WIDTH, HEIGHT)
     running = True
+
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            action = engine.handle_event(event)
+            if action == "quit":
                 running = False
-            engine.handle_event(event)
 
-        engine.handle_input()
         engine.update()
         engine.render(SCREEN)
 
@@ -32,6 +28,7 @@ def main():
         clock.tick(FPS)
 
     pygame.quit()
+
 
 if __name__ == "__main__":
     main()
