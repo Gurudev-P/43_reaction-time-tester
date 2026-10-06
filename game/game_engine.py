@@ -1,3 +1,8 @@
+import io
+import math
+import struct
+import wave
+
 import pygame
 from .round import Round
 
@@ -35,13 +40,48 @@ class GameEngine:
         self.small_font = pygame.font.SysFont("Arial", 22)
         self.game_over = False
         self.mode = "playing"
+        self._init_sounds()
+
+    def _make_tone(self, frequency, duration_ms, volume=0.25):
+        sample_rate = 22050
+        frames = int(sample_rate * duration_ms / 1000)
+        data = bytearray()
+        amplitude = int(32767 * volume)
+
+        for i in range(frames):
+            sample = int(
+                amplitude * math.sin(2 * math.pi * frequency * i / sample_rate)
+            )
+            data.extend(struct.pack("<h", sample))
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(bytes(data))
+
+        return pygame.mixer.Sound(buffer=buffer.getvalue())
+
+    def _init_sounds(self):
+        self.sounds = {}
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            self.sounds["go"] = self._make_tone(880, 120)
+            self.sounds["false_start"] = self._make_tone(220, 220)
+            self.sounds["end"] = self._make_tone(523, 300)
+        except pygame.error:
+            self.sounds = {}
+
+    def _play_sound(self, name):
+        sound = self.sounds.get(name)
+        if sound:
+            sound.play()
 
     def handle_event(self, event):
-        if self.game_over:
-            return
-
-        is_click = event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1
-        is_space = event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE
+        if event.type == pygame.QUIT:
+            return "quit"
 
         if self.mode == "results":
             if event.type == pygame.KEYDOWN:
@@ -51,7 +91,13 @@ class GameEngine:
                     self._start_session("Medium")
                 elif event.key == pygame.K_3:
                     self._start_session("Hard")
-            return
+            return None
+
+        if self.mode != "playing":
+            return None
+
+        is_click = event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1
+        is_space = event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE
 
         if (is_click or is_space) and self.round.state in ("waiting", "go"):
             reaction_ms = self.round.register_input()
@@ -60,19 +106,29 @@ class GameEngine:
             if self.round.state == "false_start":
                 self.false_starts += 1
                 self.rounds_completed += 1
+                self._play_sound("false_start")
             elif self.round.state == "result" and reaction_ms is not None:
                 self.reaction_times.append(reaction_ms)
                 self.rounds_completed += 1
+
+        return None
 
     def update(self):
         if self.game_over:
             return
 
+        previous_state = self.round.state
         self.round.update()
+
+        if previous_state == "waiting" and self.round.state == "go":
+            self._play_sound("go")
 
         if self.round.state in ("result", "false_start"):
             now = pygame.time.get_ticks()
-            if self.result_shown_at is not None and now - self.result_shown_at >= self.result_pause_ms:
+            if (
+                self.result_shown_at is not None
+                and now - self.result_shown_at >= self.result_pause_ms
+            ):
                 self._start_next_round()
 
     def _start_session(self, difficulty):
@@ -90,7 +146,9 @@ class GameEngine:
         if self.rounds_completed >= self.rounds_total:
             self.game_over = True
             self.mode = "results"
+            self._play_sound("end")
             return
+
         self.round = Round(self.min_wait_ms, self.max_wait_ms)
 
     def average_reaction_ms(self):
@@ -120,7 +178,8 @@ class GameEngine:
 
         round_text = self.font.render(
             f"{self.difficulty} - Round {min(self.rounds_completed + 1, self.rounds_total)}/{self.rounds_total}",
-            True, WHITE
+            True,
+            WHITE,
         )
         screen.blit(round_text, (10, 10))
 
@@ -140,6 +199,7 @@ class GameEngine:
         title = self.big_font.render("SESSION COMPLETE", True, WHITE)
         screen.blit(title, title.get_rect(center=(self.width // 2, 45)))
 
+        y = 100
         lines = [
             f"Difficulty: {self.difficulty}",
             f"Average valid reaction: {self.average_reaction_ms()} ms",
@@ -148,7 +208,6 @@ class GameEngine:
             "Reaction times:",
         ]
 
-        y = 100
         for line in lines:
             surf = self.font.render(line, True, WHITE)
             screen.blit(surf, (40, y))
@@ -162,7 +221,9 @@ class GameEngine:
                 screen.blit(surf, (x, y + row * 34))
             y += ((len(self.reaction_times) + 1) // 2) * 34 + 20
         else:
-            surf = self.small_font.render("No valid reaction times recorded.", True, WHITE)
+            surf = self.small_font.render(
+                "No valid reaction times recorded.", True, WHITE
+            )
             screen.blit(surf, (40, y))
             y += 30
 
