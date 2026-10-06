@@ -6,6 +6,7 @@ GRAY = (90, 90, 90)
 GREEN = (40, 180, 90)
 BLUE = (50, 90, 170)
 RED = (190, 60, 60)
+DARK = (35, 35, 35)
 
 class GameEngine:
     def __init__(self, width, height, rounds_total=5, min_wait_ms=1000, max_wait_ms=3000):
@@ -25,6 +26,7 @@ class GameEngine:
         self.font = pygame.font.SysFont("Arial", 30)
         self.big_font = pygame.font.SysFont("Arial", 46)
         self.game_over = False
+        self.mode = "playing"
 
     def handle_event(self, event):
         if self.game_over:
@@ -58,6 +60,7 @@ class GameEngine:
     def _start_next_round(self):
         if self.rounds_completed >= self.rounds_total:
             self.game_over = True
+            self.mode = "results"
             return
         self.round = Round(self.min_wait_ms, self.max_wait_ms)
 
@@ -67,6 +70,10 @@ class GameEngine:
         return round(sum(self.reaction_times) / len(self.reaction_times))
 
     def render(self, screen):
+        if self.mode == "results":
+            self._render_results(screen)
+            return
+
         if self.round.state == "waiting":
             bg, message = GRAY, "Wait for green..."
         elif self.round.state == "go":
@@ -97,3 +104,37 @@ class GameEngine:
             f"False starts: {self.false_starts}", True, WHITE
         )
         screen.blit(false_text, (10, 48))
+
+    def _render_results(self, screen):
+        screen.fill(DARK)
+
+        title = self.big_font.render("SESSION COMPLETE", True, WHITE)
+        screen.blit(title, title.get_rect(center=(self.width // 2, 45)))
+
+        lines = [
+            f"Average valid reaction: {self.average_reaction_ms()} ms",
+            f"False starts: {self.false_starts}",
+            "",
+            "Reaction times:",
+        ]
+
+        y = 110
+        for line in lines:
+            surf = self.font.render(line, True, WHITE)
+            screen.blit(surf, (40, y))
+            y += 38
+
+        if self.reaction_times:
+            for index, value in enumerate(self.reaction_times, start=1):
+                surf = self.font.render(f"Round {index}: {value} ms", True, WHITE)
+                x = 55 + ((index - 1) % 2) * 270
+                row = (index - 1) // 2
+                screen.blit(surf, (x, y + row * 35))
+            y += ((len(self.reaction_times) + 1) // 2) * 35 + 20
+        else:
+            surf = self.small_font.render("No valid reaction times recorded.", True, WHITE)
+            screen.blit(surf, (40, y))
+            y += 30
+
+        prompt = self.font.render("Close the window to exit.", True, WHITE)
+        screen.blit(prompt, prompt.get_rect(center=(self.width // 2, self.height - 45)))
